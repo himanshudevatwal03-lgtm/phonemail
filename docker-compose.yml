@@ -1,0 +1,52 @@
+version: '3.9'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: phonemail-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: phonemail
+      POSTGRES_USER: phonemail
+      POSTGRES_PASSWORD: phonemail
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  backend:
+    build:
+      context: ./backend
+    container_name: phonemail-backend
+    restart: unless-stopped
+    depends_on:
+      - db
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://phonemail:phonemail@db:5432/phonemail
+      PORT: 3001
+      FRONTEND_URL: http://localhost:5173
+      BACKEND_URL: http://localhost:3001
+      APP_URL: http://localhost:5173
+    ports:
+      - '3001:3001'
+    command: sh -c "npx prisma generate && npx prisma db push && npm run seed && npm run dev -- --host 0.0.0.0"
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: phonemail-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    env_file:
+      - .env
+    environment:
+      VITE_API_URL: http://localhost:3001
+    ports:
+      - '5173:5173'
+    command: npm run dev -- --host 0.0.0.0
+
+volumes:
+  postgres_data:
