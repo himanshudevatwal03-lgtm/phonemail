@@ -1,66 +1,66 @@
 import { PrismaClient } from '@prisma/client';
+import { hashPassword } from './utils/password.js';
+import { normalizePhone, generatePhoneMail } from './utils/phone.js';
 
 export const ensureDemoSeed = async (prisma: PrismaClient) => {
-  const users = [
-    { phone: '9876543210', displayName: 'Ava', passwordHash: 'password123' },
-    { phone: '9123456789', displayName: 'Miles', passwordHash: 'password123' },
-    { phone: '9999999999', displayName: 'Demo Admin', passwordHash: 'password123' },
+  const demoUsers = [
+    { phone: '9876543210', displayName: 'Ava', password: 'password123' },
+    { phone: '9123456789', displayName: 'Miles', password: 'password123' },
+    { phone: '9999999999', displayName: 'Demo Admin', password: 'password123' },
   ];
 
-  for (const userSeed of users) {
-    const existing = await prisma.user.findUnique({
-      where: { phone: userSeed.phone },
-    });
-
+  for (const current of demoUsers) {
+    const normalized = normalizePhone(current.phone);
+    const existing = await prisma.user.findUnique({ where: { phoneNormalized: normalized } });
     if (!existing) {
-      const normalized = userSeed.phone.replace(/\D/g, '');
       await prisma.user.create({
         data: {
-          phone: userSeed.phone,
+          phone: normalized,
           phoneNormalized: normalized,
-          displayName: userSeed.displayName,
+          displayName: current.displayName,
+          phonemail: generatePhoneMail(normalized),
+          passwordHash: await hashPassword(current.password),
           language: 'en',
-          phonemail: `${normalized}@phonemail.com`,
-          passwordHash: userSeed.passwordHash,
         },
       });
     }
   }
 
-  const usersList = await prisma.user.findMany();
-  if (usersList.length > 0 && (await prisma.message.count()) === 0) {
-    const first = usersList[0];
-    const second = usersList[1] ?? usersList[0];
-
+  const users = await prisma.user.findMany();
+  if ((await prisma.message.count()) === 0 && users.length >= 2) {
+    const [first, second] = users;
     const conversation = await prisma.conversation.create({
       data: {
         subject: 'Launch sync',
         participants: {
           create: [{ userId: first.id }, { userId: second.id }],
         },
-        messages: {
-          create: [
-            {
-              senderId: first.id,
-              recipientId: second.id,
-              senderEmail: first.phonemail,
-              recipientEmail: second.phonemail,
-              subject: 'Launch sync',
-              content: 'Hi! We are finalizing the demo flow and product launch.',
-              direction: 'outbound',
-            },
-            {
-              senderId: second.id,
-              recipientId: first.id,
-              senderEmail: second.phonemail,
-              recipientEmail: first.phonemail,
-              subject: 'Launch sync',
-              content: 'Perfect. I will review the mobile and desktop view.',
-              direction: 'inbound',
-            },
-          ],
-        },
       },
+    });
+
+    await prisma.message.createMany({
+      data: [
+        {
+          conversationId: conversation.id,
+          senderId: first.id,
+          recipientId: second.id,
+          senderEmail: first.phonemail,
+          recipientEmail: second.phonemail,
+          subject: 'Launch sync',
+          content: 'Hi! We are finalizing the product launch and the demo flow.',
+          direction: 'outbound',
+        },
+        {
+          conversationId: conversation.id,
+          senderId: second.id,
+          recipientId: first.id,
+          senderEmail: second.phonemail,
+          recipientEmail: first.phonemail,
+          subject: 'Launch sync',
+          content: 'Perfect. I will review the mobile and desktop email layout.',
+          direction: 'inbound',
+        },
+      ],
     });
 
     await prisma.draft.create({
@@ -68,21 +68,8 @@ export const ensureDemoSeed = async (prisma: PrismaClient) => {
         userId: first.id,
         to: second.phonemail,
         subject: 'Follow-up',
-        content: 'Let us finalize the onboarding copy after the demo.',
+        content: 'Let us prepare the demo flow for the final buildathon check.',
       },
     });
-
-    await prisma.notification.create({
-      data: {
-        userId: second.id,
-        type: 'sms',
-        payload: `You have received an email from ${first.phonemail}. Subject: Launch sync.`,
-      },
-    });
-
-    await prisma.message.update({
-      where: { id: conversation.messages[0]?.id ?? '' },
-      data: { favorite: true },
-    }).catch(() => undefined);
   }
 };

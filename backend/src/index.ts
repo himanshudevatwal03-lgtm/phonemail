@@ -12,10 +12,7 @@ import { createSearchRouter } from './routes/search.js';
 import { createDemoRouter } from './routes/demo.js';
 import { ensureDemoSeed } from './seed.js';
 
-const env = dotenv.config();
-if (env.error) {
-  console.warn('No .env file found, using defaults');
-}
+dotenv.config();
 
 export const prisma = new PrismaClient();
 
@@ -30,7 +27,7 @@ app.get('/api/health', async (_req, res) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
     res.json({ ok: true, status: 'healthy', db: 'connected' });
-  } catch (error) {
+  } catch {
     res.status(500).json({ ok: false, status: 'database_error' });
   }
 });
