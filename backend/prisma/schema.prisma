@@ -1,0 +1,137 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String      @id @default(cuid())
+  phone            String      @unique
+  phoneNormalized  String      @unique
+  displayName      String?
+  avatarUrl        String?
+  language         String      @default("en")
+  phonemail        String      @unique
+  passwordHash     String?
+  aliases          Alias[]
+  sentMessages     Message[]   @relation("SentMessages")
+  receivedMessages Message[]   @relation("ReceivedMessages")
+  participants     Participant[]
+  drafts           Draft[]
+  favorites        Favorite[]
+  notifications    Notification[]
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+}
+
+model AuthCode {
+  id        String   @id @default(cuid())
+  phone     String
+  code      String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+}
+
+model Alias {
+  id        String   @id @default(cuid())
+  userId    String
+  alias     String   @unique
+  active    Boolean  @default(true)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Conversation {
+  id            String       @id @default(cuid())
+  subject       String?
+  lastMessageAt DateTime?
+  participants  Participant[]
+  messages      Message[]
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+model Participant {
+  id             String       @id @default(cuid())
+  conversationId String
+  userId         String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  senderId       String?
+  recipientId    String?
+  senderEmail    String
+  recipientEmail String
+  subject        String?
+  content        String
+  direction      String       @default("outbound")
+  isRead         Boolean      @default(false)
+  favorite       Boolean      @default(false)
+  spam           Boolean      @default(false)
+  trashed        Boolean      @default(false)
+  replyToId      String?
+  attachments    Json?
+  createdAt      DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User?        @relation("SentMessages", fields: [senderId], references: [id], onDelete: SetNull)
+  recipient      User?        @relation("ReceivedMessages", fields: [recipientId], references: [id], onDelete: SetNull)
+  replyTo        Message?     @relation("ReplyChain", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies        Message[]    @relation("ReplyChain")
+
+  @@index([conversationId, createdAt])
+  @@index([senderEmail])
+  @@index([recipientEmail])
+  @@index([favorite])
+  @@index([spam])
+  @@index([trashed])
+}
+
+model Draft {
+  id          String   @id @default(cuid())
+  userId      String
+  to          String?
+  cc          String?
+  subject     String?
+  content     String
+  attachments Json?
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model Favorite {
+  id        String   @id @default(cuid())
+  messageId String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([messageId, userId])
+  @@index([userId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String
+  payload   String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
